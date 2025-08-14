@@ -40,7 +40,7 @@ def chat_with_mistral(client, model_name, prompt):
     return response.choices[0].message.content
 
 @st.cache_data(show_spinner=False)
-def get_summary_chunks(chunks, client, model_name, language):
+def get_summary_chunks(chunks, _client, model_name, language):
     results = []
     for chunk in chunks:
         prompt = generate_prompt(chunk, language=language)
@@ -48,7 +48,7 @@ def get_summary_chunks(chunks, client, model_name, language):
     return "\n--- CHUNK ---\n".join(results)
 
 @st.cache_data(show_spinner=False)
-def get_answer_chunks(chunks, question, client, model_name, language):
+def get_answer_chunks(chunks, question, _client, model_name, language):
     results = []
     for chunk in chunks:
         prompt = generate_prompt(chunk, query=question, language=language)
