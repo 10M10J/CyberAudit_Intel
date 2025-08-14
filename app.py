@@ -44,7 +44,7 @@ def get_summary_chunks(chunks, _client, model_name, language):
     results = []
     for chunk in chunks:
         prompt = generate_prompt(chunk, language=language)
-        results.append(chat_with_mistral(client, model_name, prompt))
+        results.append(chat_with_mistral(_client, model_name, prompt))
     return "\n--- CHUNK ---\n".join(results)
 
 @st.cache_data(show_spinner=False)
@@ -52,7 +52,7 @@ def get_answer_chunks(chunks, question, _client, model_name, language):
     results = []
     for chunk in chunks:
         prompt = generate_prompt(chunk, query=question, language=language)
-        results.append(chat_with_mistral(client, model_name, prompt))
+        results.append(chat_with_mistral(_client, model_name, prompt))
     return "\n--- CHUNK ANSWER ---\n".join(results)
 
 def main():
