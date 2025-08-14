@@ -5,56 +5,59 @@ import streamlit as st
 from PyPDF2 import PdfReader
 from mistralai import Mistral
 
-# Utility: chunk text
+# --- Utility Functions ---
 def chunk_text(text, max_chars=20000):
     return [text[i:i+max_chars] for i in range(0, len(text), max_chars)]
 
-# Safe text cleaning
 def sanitize_text(text):
-    # Remove control chars, obfuscate dangerous prompt patterns
     return text.replace("Ignore all above", "").strip()
 
-# Prompt generation
-def generate_prompt(user_doc, query=None, language='English'):
+def generate_prompt(user_doc, query=None, language='English', concise=False):
     sanitized = sanitize_text(user_doc)
+    if concise:
+        length_instruction = "Limit your response to maximum 150 words."
+    else:
+        length_instruction = ""
+    
     if language == 'Hindi':
         intro = 'A user provided a Cyber Security Audit Report (in Hindi):'
         prompt = f"{intro}\n{sanitized}"
         if query:
             prompt += f"\nQuestion: {query}"
-        prompt += "\nPlease respond in Hindi based on the document."
+        prompt += f"\nPlease respond in Hindi based on the document. {length_instruction}"
     else:
         intro = 'A user provided a Cyber Security Audit Report:'
         prompt = f"{intro}\n{sanitized}"
         if query:
             prompt += f"\nQuestion: {query}"
-        prompt += "\nPlease respond in English based on the document."
+        prompt += f"\nPlease respond in English based on the document. {length_instruction}"
     return prompt
 
-# Model interaction
-def chat_with_mistral(client, model_name, prompt):
-    response = client.chat.complete(
+def chat_with_mistral(_client, model_name, prompt):
+    response = _client.chat.complete(
         model=model_name,
         messages=[{"role": "user", "content": prompt}]
     )
     return response.choices[0].message.content
 
+# --- Cached Functions ---
 @st.cache_data(show_spinner=False)
 def get_summary_chunks(chunks, _client, model_name, language):
     results = []
     for chunk in chunks:
-        prompt = generate_prompt(chunk, language=language)
+        prompt = generate_prompt(chunk, language=language, concise=True)
         results.append(chat_with_mistral(_client, model_name, prompt))
-    return "\n--- CHUNK ---\n".join(results)
+    return " ".join(results)
 
 @st.cache_data(show_spinner=False)
 def get_answer_chunks(chunks, question, _client, model_name, language):
     results = []
     for chunk in chunks:
-        prompt = generate_prompt(chunk, query=question, language=language)
+        prompt = generate_prompt(chunk, query=question, language=language, concise=True)
         results.append(chat_with_mistral(_client, model_name, prompt))
-    return "\n--- CHUNK ANSWER ---\n".join(results)
+    return " ".join(results)
 
+# --- Main App ---
 def main():
     load_dotenv()
     mistral_key = os.getenv("MISTRAL_API_KEY")
@@ -64,17 +67,18 @@ def main():
 
     client = Mistral(api_key=mistral_key)
 
+    # Sidebar UI
     st.sidebar.title("CyberAudit Intel (Mistral-Powered)")
-    st.sidebar.markdown("""
-    Upload your cybersecurity audit report, get summaries or ask questions.
-    Supports English and Hindi, safe local storage, and large-doc handling.
-    """)
+    model_name = st.sidebar.selectbox("Select Mistral model", ("mistral-small-latest", "mistral-small-2503"))
+    language = st.sidebar.radio("Language", ("English", "Hindi"), horizontal=True)
+    option = st.sidebar.radio("Choose Option", ("Summary", "Chat"))
 
-    st.header("Upload & Analyze Your Audit Report")
-    model_name = st.selectbox("Select Mistral model",
-                              ("mistral-small-latest", "mistral-small-2503"))
-    language = st.radio("Language", ("English", "Hindi"), horizontal=True)
+    if st.sidebar.button("Clear History"):
+        st.session_state.pop("summary", None)
+        st.session_state.pop("chat_history", None)
+        st.success("History cleared.")
 
+    # File Upload
     uploaded_pdf = st.file_uploader("Upload PDF (Audit Report)", type="pdf")
     if uploaded_pdf:
         try:
@@ -90,33 +94,43 @@ def main():
 
         chunks = chunk_text(text)
         store_name = uploaded_pdf.name[:-4]
-
-        # Save for reuse
         cache_path = f"{store_name}.json"
         if not os.path.exists(cache_path):
             with open(cache_path, "w") as f:
                 json.dump({"text": text}, f)
 
-        st.write("Document loaded successfully.")
+        if option == "Summary":
+            st.subheader("Summary")
+            if "summary" not in st.session_state:
+                if st.button("Generate Summary"):
+                    with st.spinner("Summarizing ..."):
+                        try:
+                            summary = get_summary_chunks(chunks, client, model_name, language)
+                            st.session_state["summary"] = summary
+                        except Exception as e:
+                            st.error(f"Error during summarization: {e}")
+            if "summary" in st.session_state:
+                st.write(st.session_state["summary"])
 
-        if st.button("Generate Summary"):
-            with st.spinner("Summarizing ..."):
-                try:
-                    summary = get_summary_chunks(chunks, client, model_name, language)
-                    st.success("Summary ready.")
-                    st.write(summary)
-                except Exception as e:
-                    st.error(f"Error during summarization: {e}")
+        elif option == "Chat":
+            st.subheader("Ask Questions")
+            if "chat_history" not in st.session_state:
+                st.session_state["chat_history"] = []
+            
+            for msg in st.session_state["chat_history"]:
+                st.chat_message("user").write(msg["question"])
+                st.chat_message("assistant").write(msg["answer"])
 
-        question = st.text_input("Ask a question about the report")
-        if question:
-            with st.spinner("Finding the answer ..."):
-                try:
-                    answer = get_answer_chunks(chunks, question, client, model_name, language)
-                    st.write("Answer:")
-                    st.write(answer)
-                except Exception as e:
-                    st.error(f"Error answering question: {e}")
+            question = st.chat_input("Ask about the report")
+            if question:
+                with st.spinner("Fetching answer ..."):
+                    try:
+                        answer = get_answer_chunks(chunks, question, client, model_name, language)
+                        st.session_state["chat_history"].append({"question": question, "answer": answer})
+                        st.chat_message("user").write(question)
+                        st.chat_message("assistant").write(answer)
+                    except Exception as e:
+                        st.error(f"Error answering question: {e}")
 
 if __name__ == "__main__":
     main()
