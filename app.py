@@ -294,7 +294,7 @@ def main():
         st.session_state["full_text"] = full_text
 
     # Build chunks (kept small for better retrieval granularity)
-    chunks = chunk_text(st.session_state["full_text"], max_chars=2500, overlap=300)
+    chunks = chunk_text(st.session_state["full_text"], chunk_size=2500, overlap=300)
 
     # Prepare (or load) FAISS index + chunks (persisted)
     # We keep these in session_state to avoid hashing issues with Streamlit caching.
