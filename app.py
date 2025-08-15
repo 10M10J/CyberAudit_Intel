@@ -34,22 +34,15 @@ def read_pdf_text(uploaded_pdf) -> str:
         raise RuntimeError(f"Failed to read PDF: {e}")
 
 
-def chunk_text(text: str, max_chars: int = 1800, overlap: int = 200) -> List[str]:
+def chunk_text(text: str, chunk_size: int = 1200, overlap: int = 200) -> List[str]:
     """
-    Split text into overlapping chunks to improve retrieval recall.
+    Splits text into overlapping chunks of roughly 'chunk_size' words.
     """
+    words = text.split()
     chunks = []
-    start = 0
-    n = len(text)
-    while start < n:
-        end = min(start + max_chars, n)
-        chunk = text[start:end]
+    for i in range(0, len(words), chunk_size - overlap):
+        chunk = " ".join(words[i:i + chunk_size])
         chunks.append(chunk)
-        if end == n:
-            break
-        start = end - overlap
-        if start < 0:
-            start = 0
     return chunks
 
 
@@ -219,7 +212,7 @@ def build_summary_prompt(context: str, language: str) -> List[dict]:
     system = (
         f"You are a cybersecurity audit assistant. Summarize the provided content in {lang_line}. "
         "Be faithful to the source. Use plain language. "
-        "STRICT LIMIT: maximum 150 words."
+        "STRICT LIMIT: maximum 250 words."
     )
     user = f"Document content:\n\n{context}\n\nSummarize as requested."
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
@@ -230,7 +223,7 @@ def build_qa_prompt(question: str, context: str, language: str) -> List[dict]:
     system = (
         f"You are a concise cybersecurity audit assistant. Answer only using the given context. "
         f"Reply in {lang_line}. If the answer is not in the context, say you don't have enough information. "
-        "STRICT LIMIT: maximum 100 words."
+        "STRICT LIMIT: maximum 150 words."
     )
     user = (
         f"Context (from the audit report):\n{context}\n\n"
@@ -301,7 +294,7 @@ def main():
         st.session_state["full_text"] = full_text
 
     # Build chunks (kept small for better retrieval granularity)
-    chunks = chunk_text(st.session_state["full_text"], max_chars=1800, overlap=200)
+    chunks = chunk_text(st.session_state["full_text"], max_chars=2500, overlap=300)
 
     # Prepare (or load) FAISS index + chunks (persisted)
     # We keep these in session_state to avoid hashing issues with Streamlit caching.
