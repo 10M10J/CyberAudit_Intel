@@ -109,7 +109,7 @@ def embed_texts(_client: Mistral, texts: List[str], model: str = "mistral-embed"
     embeddings: List[List[float]] = []
     for i in range(0, len(texts), batch_size):
         batch = texts[i:i + batch_size]
-        resp = _client.embeddings.create(model=model, input=batch)
+        resp = _client.embeddings.create(model=model, inputs=batch)
         # SDK returns in the same order
         for d in resp.data:
             embeddings.append(d.embedding)
